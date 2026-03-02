@@ -1,0 +1,90 @@
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,600;0,700;0,800;1,600&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap');
+
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+:root {
+  /* Primary — terracotta */
+  --brand:        #c9521f;
+  --brand-dark:   #b5451b;
+  --brand-light:  #d97650;
+  --brand-bg:     #fde8de;
+  --brand-glow:   rgba(181, 69, 27, 0.12);
+
+  /* Surface */
+  --surface:      #f7f3ee;
+  --surface-2:    #efe9e1;
+  --card:         #fffcf8;
+
+  /* Borders */
+  --border:       #e8dfd4;
+  --border-strong:#d4c8b8;
+
+  /* Text */
+  --text-1:       #1a1208;
+  --text-2:       #4a3728;
+  --text-3:       #9a8878;
+
+  /* Semantic */
+  --green:        #2d6a4f;
+  --green-bg:     #d8f3dc;
+  --green-text:   #1b4332;
+  --amber:        #c77d0a;
+  --amber-bg:     #fff3cd;
+  --amber-text:   #7d4e00;
+  --red:          #c0392b;
+  --red-bg:       #fde8e8;
+  --red-text:     #7b1d1d;
+  --blue:         #1a6b7c;
+  --blue-bg:      #e8f4f8;
+
+  /* Typography */
+  --font-display: 'Playfair Display', serif;
+  --font-body:    'Plus Jakarta Sans', sans-serif;
+
+  /* Radii */
+  --radius-sm:    8px;
+  --radius:       12px;
+  --radius-lg:    18px;
+  --radius-xl:    24px;
+
+  /* Shadows */
+  --shadow-sm:    0 1px 3px rgba(26,18,8,.06), 0 1px 2px rgba(26,18,8,.04);
+  --shadow:       0 4px 16px rgba(26,18,8,.08);
+  --shadow-lg:    0 16px 40px rgba(26,18,8,.13);
+  --shadow-brand: 0 8px 24px rgba(181,69,27,.22);
+}
+
+html { font-size: 16px; scroll-behavior: smooth; }
+
+body {
+  font-family: var(--font-body);
+  background: var(--surface);
+  color: var(--text-1);
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-display);
+  line-height: 1.2;
+}
+
+a    { color: inherit; text-decoration: none; }
+button { cursor: pointer; font-family: var(--font-body); }
+input, textarea, select { font-family: var(--font-body); }
+
+/* Scrollbar */
+::-webkit-scrollbar       { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 3px; }
+
+/* Animations */
+@keyframes fadeIn  { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes spin    { to { transform: rotate(360deg); } }
+@keyframes pulse   { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+
+.fade-in { animation: fadeIn 0.3s ease both; }
