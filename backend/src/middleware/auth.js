@@ -1,9 +1,8 @@
 import jwt from 'jsonwebtoken'
-import { supabase } from '../config/supabase.js'
+import { db } from '../config/firebase.js'
 
 export const authenticate = async (req, res, next) => {
   try {
-    // Accept token from cookie OR Authorization header (for flexibility)
     let token = req.cookies?.access_token
     const header = req.headers.authorization
     if (header?.startsWith('Bearer ')) token = header.split(' ')[1]
@@ -14,22 +13,23 @@ export const authenticate = async (req, res, next) => {
 
     const decoded = jwt.verify(token, process.env.JWT_ACCESS_SECRET)
 
-    // Fetch fresh user so bans/deactivations take effect immediately
-    const { data: user, error } = await supabase
-      .from('users')
-      .select('id, email, name, role, is_verified, active_jobs')
-      .eq('id', decoded.userId)
-      .single()
-
-    if (error || !user) {
+    const userDoc = await db.collection('users').doc(decoded.userId).get()
+    if (!userDoc.exists) {
       return res.status(401).json({ error: 'User not found' })
     }
 
-    if (!user.is_verified) {
+    const user = userDoc.data()
+    if (!user.isVerified) {
       return res.status(403).json({ error: 'Email not verified', code: 'EMAIL_NOT_VERIFIED' })
     }
 
-    req.user = user
+    req.user = {
+      id:         userDoc.id,
+      email:      user.email,
+      name:       user.name,
+      role:       user.role,
+      activeJobs: user.activeJobs,
+    }
     next()
   } catch (err) {
     if (err.name === 'TokenExpiredError') {

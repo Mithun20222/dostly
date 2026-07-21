@@ -1,4 +1,7 @@
 import { NavLink, useNavigate } from 'react-router-dom'
+import { useAuthStore } from '../../store/authStore'
+import { Avatar } from '../ui'
+import { authAPI } from '../../api'
 
 const NAV_LINKS = [
   { to: '/dashboard',    label: 'Dashboard', icon: '⊞' },
@@ -8,7 +11,14 @@ const NAV_LINKS = [
 ]
 
 export default function Navbar() {
-  const navigate = useNavigate()
+  const navigate  = useNavigate()
+  const { user, clearUser } = useAuthStore()
+
+  const handleLogout = async () => {
+    try { await authAPI.logout() } catch {}
+    clearUser()
+    navigate('/login')
+  }
 
   return (
     <nav style={{
@@ -37,10 +47,7 @@ export default function Navbar() {
           fontFamily: 'var(--font-display)',
           fontWeight: 800, fontSize: 22,
           letterSpacing: '-0.02em',
-          color: 'var(--text-1)',
-        }}>
-          Dostly
-        </span>
+        }}>Dostly</span>
       </div>
 
       {/* Nav links */}
@@ -51,41 +58,39 @@ export default function Navbar() {
             to={link.to}
             style={({ isActive }) => ({
               display: 'flex', alignItems: 'center', gap: 6,
-              padding: '6px 14px',
-              borderRadius: 8,
+              padding: '6px 14px', borderRadius: 8,
               fontSize: 13, fontWeight: isActive ? 600 : 400,
               color: isActive ? 'var(--brand)' : 'var(--text-2)',
               background: isActive ? 'var(--brand-bg)' : 'transparent',
-              transition: 'all 0.15s',
-              textDecoration: 'none',
+              transition: 'all 0.15s', textDecoration: 'none',
             })}
           >
-            <span style={{ fontSize: link.icon === '+' ? 20 : 13 }}>
-              {link.icon}
-            </span>
+            <span style={{ fontSize: link.icon === '+' ? 20 : 13 }}>{link.icon}</span>
             {link.label}
           </NavLink>
         ))}
       </div>
 
-      {/* User area — hardcoded for now, will connect to auth later */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-        <div style={{
-          width: 34, height: 34, borderRadius: '50%',
-          background: 'var(--brand-bg)',
-          border: '2px solid var(--brand)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontFamily: 'var(--font-display)', fontWeight: 700,
-          fontSize: 13, color: 'var(--brand)',
-        }}>
-          AK
+      {/* User area */}
+      {user && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <Avatar name={user.name} size={34} />
+          <div>
+            <div style={{ fontSize: 13, fontWeight: 600, lineHeight: 1.2 }}>{user.name}</div>
+            <div style={{ fontSize: 11, color: 'var(--text-3)' }}>★ {user.repScore ?? '5.0'}</div>
+          </div>
+          <button
+            onClick={handleLogout}
+            style={{
+              marginLeft: 8, fontSize: 12, color: 'var(--text-3)',
+              background: 'none', border: '1px solid var(--border)',
+              borderRadius: 6, padding: '4px 10px', cursor: 'pointer',
+            }}
+          >
+            Sign out
+          </button>
         </div>
-        <div>
-          <div style={{ fontSize: 13, fontWeight: 600, lineHeight: 1.2 }}>Arjun Kumar</div>
-          <div style={{ fontSize: 11, color: 'var(--text-3)' }}>★ 4.7</div>
-        </div>
-      </div>
-
+      )}
     </nav>
   )
 }

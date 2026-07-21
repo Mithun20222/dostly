@@ -1,13 +1,12 @@
 import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
 import crypto from 'crypto'
-import { supabase } from '../config/supabase.js'
+import { db } from '../config/firebase.js'
 
 // ── Helpers ───────────────────────────────────────────────────
 
 const ALLOWED_DOMAINS = (process.env.ALLOWED_EMAIL_DOMAINS || 'college.edu.in')
-  .split(',')
-  .map(d => d.trim().toLowerCase())
+  .split(',').map(d => d.trim().toLowerCase())
 
 export const isAllowedEmail = (email) => {
   const domain = email.split('@')[1]?.toLowerCase()
@@ -32,11 +31,11 @@ export const setTokenCookies = (res, accessToken, refreshToken) => {
   const isProd = process.env.NODE_ENV === 'production'
   res.cookie('access_token', accessToken, {
     httpOnly: true, secure: isProd, sameSite: 'strict',
-    maxAge: 15 * 60 * 1000,           // 15 min
+    maxAge: 15 * 60 * 1000,
   })
   res.cookie('refresh_token', refreshToken, {
     httpOnly: true, secure: isProd, sameSite: 'strict',
-    maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+    maxAge: 7 * 24 * 60 * 60 * 1000,
   })
 }
 
@@ -47,37 +46,45 @@ export const registerUser = async ({ name, email, password, phone, role }) => {
     throw { status: 400, message: 'Only university email addresses are allowed' }
   }
 
-  // Check for existing account
-  const { data: existing } = await supabase
-    .from('users')
-    .select('id')
-    .eq('email', email)
-    .single()
+  // Check if email already exists
+  const existing = await db.collection('users')
+    .where('email', '==', email).limit(1).get()
 
-  if (existing) {
+  if (!existing.empty) {
     throw { status: 409, message: 'An account with this email already exists' }
   }
 
-  const passwordHash   = await bcrypt.hash(password, 12)
-  const verifyToken    = crypto.randomBytes(32).toString('hex')
+  const passwordHash    = await bcrypt.hash(password, 12)
+  const verifyToken     = crypto.randomBytes(32).toString('hex')
   const verifyTokenHash = crypto.createHash('sha256').update(verifyToken).digest('hex')
 
-  const { data: user, error } = await supabase
-    .from('users')
-    .insert({
-      name, email, role,
-      phone: phone || null,
-      password_hash: passwordHash,
-      verify_token:  verifyTokenHash,
-      verify_token_expires: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
-    })
-    .select('id, email, name, role')
-    .single()
+  const userRef = db.collection('users').doc()
+  await userRef.set({
+    id:                   userRef.id,
+    name,
+    email,
+    role,
+    phone:                phone || null,
+    passwordHash,
+    avatarUrl:            null,
+    upiId:                null,
+    repScore:             5.0,
+    completions:          0,
+    cancellations:        0,
+    disputes:             0,
+    activeJobs:           0,
+    isVerified:           false,
+    verifyTokenHash,
+    verifyTokenExpires:   new Date(Date.now() + 24 * 60 * 60 * 1000),
+    refreshTokenHash:     null,
+    createdAt:            new Date(),
+    updatedAt:            new Date(),
+  })
 
-  if (error) throw { status: 500, message: 'Registration failed', detail: error.message }
-
-  // Return the plain token so we can email it
-  return { user, verifyToken }
+  return {
+    user: { id: userRef.id, email, name, role },
+    verifyToken,
+  }
 }
 
 // ── Verify email ──────────────────────────────────────────────
@@ -85,63 +92,68 @@ export const registerUser = async ({ name, email, password, phone, role }) => {
 export const verifyEmail = async (token) => {
   const tokenHash = crypto.createHash('sha256').update(token).digest('hex')
 
-  const { data: user, error } = await supabase
-    .from('users')
-    .select('id, verify_token_expires')
-    .eq('verify_token', tokenHash)
-    .eq('is_verified', false)
-    .single()
+  const snap = await db.collection('users')
+    .where('verifyTokenHash', '==', tokenHash)
+    .where('isVerified', '==', false)
+    .limit(1).get()
 
-  if (error || !user) {
+  if (snap.empty) {
     throw { status: 400, message: 'Invalid or expired verification link' }
   }
 
-  if (new Date(user.verify_token_expires) < new Date()) {
+  const userDoc = snap.docs[0]
+  const user    = userDoc.data()
+
+  if (new Date(user.verifyTokenExpires.toDate()) < new Date()) {
     throw { status: 400, message: 'Link has expired. Please register again.' }
   }
 
-  await supabase
-    .from('users')
-    .update({ is_verified: true, verify_token: null, verify_token_expires: null })
-    .eq('id', user.id)
+  await userDoc.ref.update({
+    isVerified:         true,
+    verifyTokenHash:    null,
+    verifyTokenExpires: null,
+    updatedAt:          new Date(),
+  })
 
-  return user.id
+  return userDoc.id
 }
 
 // ── Login ─────────────────────────────────────────────────────
 
 export const loginUser = async ({ email, password }) => {
-  const { data: user, error } = await supabase
-    .from('users')
-    .select('id, email, name, role, password_hash, is_verified')
-    .eq('email', email)
-    .single()
+  const snap = await db.collection('users')
+    .where('email', '==', email).limit(1).get()
 
-  // Same error for wrong email OR wrong password — don't leak which one
-  if (error || !user) {
+  if (snap.empty) {
     throw { status: 401, message: 'Invalid email or password' }
   }
 
-  const valid = await bcrypt.compare(password, user.password_hash)
+  const userDoc = snap.docs[0]
+  const user    = userDoc.data()
+
+  const valid = await bcrypt.compare(password, user.passwordHash)
   if (!valid) {
     throw { status: 401, message: 'Invalid email or password' }
   }
 
-  if (!user.is_verified) {
+  if (!user.isVerified) {
     throw { status: 403, message: 'Please verify your email first', code: 'EMAIL_NOT_VERIFIED' }
   }
 
-  const tokens = generateTokens(user.id)
-
-  // Store hashed refresh token so we can detect reuse
+  const tokens      = generateTokens(userDoc.id)
   const refreshHash = crypto.createHash('sha256').update(tokens.refreshToken).digest('hex')
-  await supabase
-    .from('users')
-    .update({ refresh_token_hash: refreshHash })
-    .eq('id', user.id)
 
-  const { password_hash: _, refresh_token_hash: __, ...safeUser } = user
-  return { user: safeUser, ...tokens }
+  await userDoc.ref.update({ refreshTokenHash: refreshHash, updatedAt: new Date() })
+
+  return {
+    user: {
+      id:    userDoc.id,
+      email: user.email,
+      name:  user.name,
+      role:  user.role,
+    },
+    ...tokens,
+  }
 }
 
 // ── Refresh tokens ────────────────────────────────────────────
@@ -155,21 +167,15 @@ export const refreshTokens = async (refreshToken) => {
   }
 
   const tokenHash = crypto.createHash('sha256').update(refreshToken).digest('hex')
+  const userDoc   = await db.collection('users').doc(decoded.userId).get()
 
-  const { data: user } = await supabase
-    .from('users')
-    .select('id, refresh_token_hash')
-    .eq('id', decoded.userId)
-    .single()
-
-  // Refresh token reuse detection — if hashes don't match, someone is replaying a stolen token
-  if (!user || user.refresh_token_hash !== tokenHash) {
+  if (!userDoc.exists || userDoc.data().refreshTokenHash !== tokenHash) {
     throw { status: 401, message: 'Refresh token reuse detected' }
   }
 
-  const tokens = generateTokens(user.id)
+  const tokens  = generateTokens(decoded.userId)
   const newHash = crypto.createHash('sha256').update(tokens.refreshToken).digest('hex')
-  await supabase.from('users').update({ refresh_token_hash: newHash }).eq('id', user.id)
+  await userDoc.ref.update({ refreshTokenHash: newHash, updatedAt: new Date() })
 
   return tokens
 }
@@ -177,8 +183,6 @@ export const refreshTokens = async (refreshToken) => {
 // ── Logout ────────────────────────────────────────────────────
 
 export const logoutUser = async (userId) => {
-  await supabase
-    .from('users')
-    .update({ refresh_token_hash: null })
-    .eq('id', userId)
+  await db.collection('users').doc(userId)
+    .update({ refreshTokenHash: null, updatedAt: new Date() })
 }

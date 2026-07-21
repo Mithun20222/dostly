@@ -1,6 +1,8 @@
 # Dependencies
 node_modules/
 
+backend/src/config/serviceAccount.json
+
 # Environment variables
 .env
 .env.local
